@@ -52,7 +52,7 @@ Ubuntu Bash, Azure Connected Machine Agent, Linux Custom Script 확장.
 - 실제 계정 값은 문서에 저장하지 않는다. 예제 이름은 리소스 그룹 `rg-arc-lab-01`,
   VM 및 Arc 서버 `arc-lab-ubuntu-01`, 사용자 `arcadmin`으로 통일한다.
 
-### 작업 1: 전용 VM 생성과 안전한 접근을 안내하는 README
+### Task 1: 전용 VM 생성과 안전한 접근을 안내하는 README
 
 **Files:** 생성 `README.md`.
 
@@ -86,7 +86,7 @@ Ubuntu Bash, Azure Connected Machine Agent, Linux Custom Script 확장.
   문서만 작성했다면 Azure 검증은 미실시로 표시한다.
   `git diff --check`가 성공하면 `README.md`만 명시적으로 스테이징해 커밋한다.
 
-### 작업 2: Arc 등록·실제 관리 동작·정리를 안내하는 실습 가이드
+### Task 2: Arc 등록·실제 관리 동작·정리를 안내하는 실습 가이드
 
 **Files:** 생성 `docs\hands-on.md`, 수정 `README.md`의 상세 가이드 링크.
 
