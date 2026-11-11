@@ -1,10 +1,14 @@
 # 처음 시작하는 Azure Arc: Azure VM 한 대로 배우는 서버 관리
 
 > Azure 밖의 장비가 없는 분을 위한 한국어 핸즈온입니다. **목표 시간 90분** 동안
-> Ubuntu VM 한 대를 평가용 서버로 준비하고, Azure Arc 등록·태그·확장 관리를 경험한 뒤 정리합니다.
+> Windows Server VM 한 대를 평가용 서버로 준비하고, Azure Arc 등록·태그·확장 관리를 경험한 뒤 정리합니다.
 
 **처음이라면 [00. Azure Arc 첫걸음](docs/00-azure-arc-basics.md)부터 읽어보세요.**
-로컬 컨테이너나 Kubernetes 환경은 필요하지 않습니다. Windows PC의 SSH와 Azure Portal을 사용합니다.
+로컬 컨테이너나 Kubernetes 환경은 필요하지 않습니다. Windows PC의 원격 데스크톱(RDP)과 Azure Portal을 사용합니다.
+
+기존 Ubuntu 실습을 **Windows Server 2022 Datacenter(x64, Desktop Experience)** 기준으로 변경했습니다.
+이미 Ubuntu VM을 만들었다면 OS를 제자리에서 바꾸는 절차가 아닙니다.
+[기존 자원을 정리](docs/hands-on.md#existing-linux-lab)한 후 새 Windows VM을 만드세요.
 
 ⚠️ **주의**
 
@@ -26,12 +30,12 @@ Microsoft의 [Azure VM 평가 절차][evaluate]를 사용하며 운영용으로 
 | ⚠️ **주의** | 비용, 관리 경로 손실, 잘못된 대상 삭제를 방지합니다. |
 
 **명령 실행 위치가 세 곳으로 바뀝니다.** 참고 교재와 달리 모든 명령을 Cloud Shell에서 실행하지 않습니다.
-이 실습은 Azure VM Guest Agent를 비활성화하므로 VM Run Command에 의존하지 않고 SSH를 유지합니다.
+이 실습은 Azure VM Guest Agent를 비활성화하므로 VM Run Command에 의존하지 않고 RDP를 유지합니다.
 
 | 실행 위치 | 사용하는 작업 |
 | --- | --- |
-| **PC / PowerShell** | 내 Windows PC에서 SSH 접속·파일 복사 |
-| **Ubuntu / Bash** | SSH로 접속한 VM 안에서 서비스·방화벽·Arc 에이전트 설정 |
+| **PC / PowerShell** | 내 Windows PC에서 RDP 연결 시작 |
+| **Windows VM / 관리자 Windows PowerShell** | RDP로 접속한 VM 안에서 서비스·방화벽·Arc 에이전트 설정 |
 | **Cloud Shell / Bash** | Portal의 Cloud Shell에서 Azure 구독·Arc 확장 관리 |
 | **Portal** | 리소스 생성, 상태 확인, 태그와 삭제 작업 |
 
@@ -44,17 +48,17 @@ Microsoft의 [Azure VM 평가 절차][evaluate]를 사용하며 운영용으로 
 | 표기 | 읽는 방법 |
 | --- | --- |
 | `<VM_PUBLIC_IP>` 같은 꺾쇠 값 | 자신의 실제 값으로 바꾸며 꺾쇠도 제거합니다. |
-| `$VmPublicIp` | PC PowerShell의 변수입니다. Bash 변수와 공유되지 않습니다. |
-| `$SUBSCRIPTION_ID` | 해당 Bash 세션의 변수입니다. 다른 창·새 세션에는 자동 전달되지 않습니다. |
-| `sudo` | Ubuntu 안에서 관리자 권한으로 실행합니다. Azure RBAC 권한을 주는 명령은 아닙니다. |
-| `&&` | 앞 명령이 성공한 경우에만 뒤 명령을 실행합니다. |
+| `$VmPublicIp`, `$env:ProgramFiles` | PowerShell 변수와 환경 변수입니다. PC와 VM은 서로 다른 세션입니다. |
+| `$SUBSCRIPTION_ID` | Cloud Shell Bash의 변수입니다. 다른 창·새 세션에는 자동 전달되지 않습니다. |
+| 관리자 Windows PowerShell | VM에서 **관리자 권한으로 실행**한 64비트 Windows PowerShell 5.1입니다. Azure RBAC 권한과는 다릅니다. |
+| `& "경로"` | PowerShell에서 경로에 공백이 있는 실행 파일을 호출합니다. |
 | `\|` | 앞 명령의 출력을 뒤 명령에 전달합니다. |
 | 줄 끝 `\` | Bash에서 다음 줄까지 같은 명령입니다. 줄 끝에 다른 문자를 덧붙이지 않습니다. |
 | `--query`, `-o json` | Azure CLI 결과의 선택 범위와 출력 형식을 정합니다. |
 
-대부분의 명령은 종료 코드 0이 성공이지만, `command -v azcmagent`의 미설치 확인이나
-`systemctl is-active`의 비활성 상태 확인에는 예외가 있습니다. 각 단계의 **확인**에서
-예상한 출력과 종료 상태를 함께 읽으세요. 예외를 다른 실패에도 일괄 적용하지 않습니다.
+Windows PowerShell 5.1에는 Bash의 줄 이어쓰기나 `&&`를 그대로 사용할 수 없습니다.
+명령은 표시된 실행 위치에만 붙여 넣으세요. 각 단계의 **확인**에서 실제 출력과 오류를 읽고,
+`azcmagent.exe`, `curl.exe` 같은 외부 프로그램은 `$LASTEXITCODE`도 확인합니다.
 
 ## 무엇을 배우나요?
 
@@ -68,8 +72,8 @@ Custom Script 확장으로 파일을 만들어 실제 명령 실행까지 경험
 
 ```mermaid
 flowchart LR
-  PC["내 PC · SSH 키"] -->|"SSH · TCP 22 · 실습자 IP만"| OS
-  subgraph VM["Azure VM 한 대 · Ubuntu 24.04 x64"]
+  PC["내 PC · 원격 데스크톱"] -->|"RDP · TCP 3389 · 실습자 IP만"| OS
+  subgraph VM["Azure VM 한 대 · Windows Server 2022 x64"]
     OS["게스트 OS"]
     AGENT["Connected Machine Agent"]
     OS --- AGENT
@@ -86,9 +90,9 @@ flowchart LR
 | Azure VM: `Microsoft.Compute/virtualMachines` | 전원, CPU·메모리, 네트워크, 디스크 관리 |
 | Arc 서버: `Microsoft.HybridCompute/machines` | 게스트 OS 정보, Arc 에이전트, 확장 관리 |
 
-공인 IP의 SSH 경로는 사람이 VM을 준비하기 위한 것입니다.
+공인 IP의 RDP 경로는 사람이 VM을 준비하기 위한 것입니다.
 Arc 에이전트의 HTTPS 경로는 Azure와 관리 정보를 교환하기 위한 것이며 서로 다른 경로입니다.
-Arc 등록이 성공해도 SSH가 자동으로 열리는 것은 아닙니다.
+Arc 등록이 성공해도 RDP가 자동으로 열리는 것은 아닙니다.
 
 ## 모듈 목차
 
@@ -99,8 +103,8 @@ Arc 등록이 성공해도 SSH가 자동으로 열리는 것은 아닙니다.
 | --- | --- | --- | ---: |
 | 00 | [Azure Arc 첫걸음](docs/00-azure-arc-basics.md) | 구독·RG·리전, Arc와 두 관리 리소스의 차이 설명 | 10분 |
 | 01 | [시작 전 확인](#prerequisites) | 권한·공급자·정책·비용 확인 | 10분 |
-| 02 | [전용 Ubuntu VM 만들기](#vm-create) | 실습용 VM·네트워크·SSH 키 준비 | 15분 |
-| 03 | [SSH 접속 확인](#ssh-check) | OS·아키텍처·sudo와 관리 경로 확인 | 5분 |
+| 02 | [전용 Windows VM 만들기](#vm-create) | 실습용 VM·네트워크·로컬 관리자 준비 | 15분 |
+| 03 | [RDP 접속 확인](#rdp-check) | OS·아키텍처·관리자 권한과 관리 경로 확인 | 5분 |
 | 04 | [평가 환경 준비](docs/hands-on.md#prepare) | VM 확장·Guest Agent·IMDS를 평가용으로 구성 | 15분 |
 | 05 | [Arc 등록과 기본 관리](docs/hands-on.md#onboard) | Arc 연결·대상 ID·태그 확인 | 10분 |
 | 06 | [Arc 확장 실습](docs/hands-on.md#extension-lab) | 실제 파일 생성과 확장 제거 검증 | 15분 |
@@ -182,8 +186,10 @@ Arc의 기본 인벤토리·태그 관리와 Custom Script 실행은
 | 실습 시간 | 사용할 시간과 종료·삭제 시점을 정하고 비용 추정에 반영 |
 
 고정 SKU나 요금은 이 문서에서 보장하지 않습니다. Portal이 허용하는
-**2 vCPU·4 GiB 수준의 작은 x64 후보부터** 비교하고, 메모리 부족 시 비용을 다시 확인합니다.
-VM 가격만 보지 말고 디스크와 공인 IP도 합산하세요.
+**2 vCPU·8 GiB 수준의 x64 후보부터** 비교합니다. Windows GUI와 에이전트 실습의
+메모리 여유를 위한 출발점이지 최소 요구 사양이나 고정 SKU 보장은 아닙니다.
+Windows 라이선스가 포함된 VM 요금, 디스크와 공인 IP도 합산하세요.
+Azure Hybrid Benefit은 자격이 확인된 경우에만 선택합니다.
 Cost Management 예산 알림은 지출을 강제로 막는 기능이 아닙니다.
 
 📋 **확인**
@@ -194,7 +200,7 @@ Cost Management 예산 알림은 지출을 강제로 막는 기능이 아닙니�
 - [ ] 비용 부담을 승인했습니다. 확인 전에는 다음 절에서 배포하지 않습니다.
 
 <a id="vm-create"></a>
-## 2. 전용 Ubuntu VM 만들기
+## 2. 전용 Windows VM 만들기
 
 > 모듈 02 · 목표 15분. 다른 자원과 섞이지 않는 실습용 컴퓨터를 만듭니다.
 
@@ -213,29 +219,29 @@ Portal UI 명칭은 표시 언어와 업데이트에 따라 달라질 수 있습
 | 항목 | 실습 설정 |
 | --- | --- |
 | 리소스 그룹 | 새 전용 그룹 `rg-arc-lab-01` |
-| VM 이름 | `arc-lab-ubuntu-01` |
-| 이미지 | Canonical Ubuntu Server **24.04 LTS**, **x64**, 일반 이미지 |
+| VM 이름·컴퓨터 이름 | `arc-lab-win-01` (Windows 컴퓨터 이름 15자 제한 이내) |
+| 이미지 | Microsoft Windows Server **2022 Datacenter**, **x64**, **Desktop Experience**. Core·Azure Edition·SQL Server 이미지는 선택하지 않음 |
 | VM 크기 | 앞에서 비용·할당량을 확인한 작은 크기 |
 | 가용성 | 단일 VM. 별도 고가용성 리소스 없음 |
-| 인증 | SSH 공개 키, 사용자 `arcadmin` |
+| 인증 | 로컬 관리자 `arcadmin`과 새 강력한 암호. 도메인·Entra 로그인 확장은 사용하지 않음 |
 | 디스크 | 기본 OS 디스크만 사용. 추가 데이터 디스크 없음 |
 | VNet·서브넷 | 실습 전용 새 VNet·서브넷 |
 | 공인 IP | 실습용 Standard 공인 IP 한 개, VM NIC에 연결 |
 | NIC NSG | Advanced에서 실습용 새 NSG 구성 |
-| SSH 인바운드 | TCP 22, **실습자 공인 IPv4 `/32`만** 허용 |
+| RDP 인바운드 | TCP 3389, **실습자 공인 IPv4 `/32`만** 허용. SSH 22는 열지 않음 |
 | 부가 관리 | 모니터링·자동 패치·Defender·백업·추가 확장을 새로 활성화하지 않음 |
 
 ⚠️ **주의**
 
-**SSH를 `Any` 또는 `0.0.0.0/0`에 열지 마세요.**
-기본 화면의 SSH 체크박스가 전체 인터넷 허용 규칙을 만들었다면 규칙을 제거하고,
+**RDP를 `Any` 또는 `0.0.0.0/0`에 열지 마세요.**
+기본 화면의 RDP 체크박스가 전체 인터넷 허용 규칙을 만들었다면 규칙을 제거하고,
 고급 NSG 설정에서 소스 IP를 제한한 뒤 배포합니다.
-회사 프록시·VPN 환경에서는 실제 SSH 트래픽의 공인 출구 IP를 관리자와 확인하세요.
-IP가 바뀌면 NSG와 이후 Ubuntu 방화벽의 허용 IP도 갱신해야 합니다.
+회사 프록시·VPN 환경에서는 실제 RDP 트래픽의 공인 출구 IP를 관리자와 확인하세요.
+IP가 바뀌면 NSG의 허용 IP도 갱신해야 합니다. Windows 방화벽과 NLA는 끄지 않습니다.
 
 아웃바운드는 NIC에 직접 연결한 공인 IP를 사용합니다. 서브넷의 기본 아웃바운드가
 자동으로 제공된다고 가정하지 않습니다. 강제 터널링·UDR·방화벽이 적용되어 있다면
-DNS, Ubuntu 패키지 저장소와 [Arc 필수 HTTPS 엔드포인트][network] 접근을 먼저 확인합니다.
+DNS, Microsoft 에이전트 다운로드 주소와 [Arc 필수 HTTPS 엔드포인트][network] 접근을 먼저 확인합니다.
 Arc 연결만을 위해 별도의 인바운드 포트를 열 필요는 없습니다.
 
 Trusted Launch 등 보안 기본값을 무조건 해제하지 않습니다. 다만 자동으로
@@ -243,28 +249,29 @@ Guest Attestation 등의 확장이 설치되었다면, 다음 실습의 **확장
 정책이 확장을 계속 재설치하면 진행하지 말고 관리자와 확인하세요.
 
 **검토 + 만들기**에서 비용과 선택값을 다시 확인하고, 승인했다면 배포합니다.
-개인 키를 내려받았다면 안전한 사용자 폴더에 보관하세요.
-키·토큰과 다운로드한 온보딩 스크립트를 이 Git 저장소에 복사하거나 커밋하지 않습니다.
+관리자 암호는 승인된 암호 관리자에 보관하고 명령줄이나 문서에 적지 않습니다.
+암호·토큰과 다운로드한 온보딩 스크립트를 이 Git 저장소에 복사하거나 커밋하지 않습니다.
 
 📋 **확인 — Portal**
 
-- [ ] 배포가 성공했고 VM이 실행 중이며 Ubuntu 24.04 x64를 선택했습니다.
+- [ ] 배포가 성공했고 VM이 실행 중이며 Windows Server 2022 Datacenter x64 GUI 이미지를 선택했습니다.
 - [ ] 이번 전용 그룹 안에 VM·OS 디스크·NIC·NSG·VNet·공인 IP가 있습니다.
-- [ ] NIC에 연결된 NSG의 TCP 22 소스가 실습자 IP `/32`이며, 전체 인터넷 허용 규칙은 없습니다.
-- [ ] SSH 개인 키를 안전한 사용자 폴더에 보관했습니다.
+- [ ] NIC에 연결된 NSG의 TCP 3389 소스가 실습자 IP `/32`이며, 전체 인터넷 허용 규칙은 없습니다.
+- [ ] 로컬 관리자 암호를 안전하게 보관했습니다.
 
 아직 Arc 머신이 없어도 정상입니다. 지금 생성한 것은 **Azure VM 리소스**입니다.
 
 <a id="ssh-check"></a>
-## 3. SSH 접속 확인
+<a id="rdp-check"></a>
+## 3. RDP 접속 확인
 
 > 모듈 03 · 목표 5분. Arc 실습 전 사용할 유일한 직접 관리 경로를 확인합니다.
 
 👁️ **설명**
 
-SSH는 내 PC에서 Ubuntu의 명령줄에 접속하는 방법입니다.
-공개 키는 VM에, 개인 키는 내 PC에 둡니다. 개인 키를 VM에 복사하지 않습니다.
-다음 단계에서 Azure VM Guest Agent를 끄므로 **SSH가 되는지 먼저 확인하는 순서**가 중요합니다.
+RDP는 내 PC에서 Windows VM의 바탕 화면에 접속하는 방법입니다.
+Azure 로그인과 VM의 로컬 관리자 로그인은 다른 인증입니다.
+다음 단계에서 Azure VM Guest Agent를 끄므로 **RDP가 되는지 먼저 확인하는 순서**가 중요합니다.
 
 🟢 **실행 — PC / PowerShell**
 
@@ -274,35 +281,40 @@ VM 배포 후 Portal에서 공인 IP를 확인합니다.
 
 ```powershell
 $VmPublicIp = '<VM_PUBLIC_IP>'
-$PrivateKeyPath = "$HOME\.ssh\<PRIVATE_KEY_FILE>"
-ssh -i $PrivateKeyPath "arcadmin@$VmPublicIp"
+mstsc.exe /v:$VmPublicIp
 ```
 
-예제 경로와 다른 폴더에 키를 저장했다면 실제 키 경로를 사용합니다.
-첫 접속의 호스트 키 지문은 신뢰할 수 있는 관리 경로로 확인하고 수락합니다.
-시간 초과라면 VM 전원, 공인 IP, NSG의 소스 `/32`, 회사 네트워크의 TCP 22 차단부터 확인합니다.
-이를 해결하려고 SSH를 전체 인터넷에 개방하지 마세요.
+원격 데스크톱에서 **다른 계정 사용**을 선택하고 `arc-lab-win-01\arcadmin`과
+생성 시 정한 암호를 입력합니다. 암호를 위 명령에 넣지 않습니다.
+첫 접속의 인증서 경고는 대상 VM·주소·인증서를 신뢰할 수 있는 경로로 확인한 뒤 판단합니다.
+시간 초과라면 VM 전원, 공인 IP, NSG의 소스 `/32`, 회사 네트워크의 TCP 3389 차단부터 확인합니다.
+이를 해결하려고 RDP를 전체 인터넷에 개방하거나 NLA를 해제하지 마세요.
 
-🟢 **실행 — Ubuntu / Bash**
+🟢 **실행 — Windows VM / 관리자 Windows PowerShell**
 
-접속한 Ubuntu SSH 터미널에서 실행합니다. PC의 PowerShell 프롬프트와 혼동하지 마세요.
+RDP 안에서 시작 메뉴의 **Windows PowerShell → 관리자 권한으로 실행**을 선택합니다.
+PowerShell(x86)이나 PC의 PowerShell 창과 혼동하지 마세요.
 
-```bash
-cat /etc/os-release
-uname -m
-sudo -v
+```powershell
+Get-CimInstance Win32_OperatingSystem | Select-Object Caption, Version, OSArchitecture
+$env:COMPUTERNAME
+[Environment]::Is64BitProcess
+$PSVersionTable.PSVersion
+$principal = [Security.Principal.WindowsPrincipal]::new([Security.Principal.WindowsIdentity]::GetCurrent())
+$principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 ```
 
 📋 **확인**
 
 | 확인 명령 | 기대 결과 | 의미 |
 | --- | --- | --- |
-| `cat /etc/os-release` | `VERSION_ID="24.04"` | 지원되는 Ubuntu 버전 |
-| `uname -m` | `x86_64` | 이번 실습의 x64 아키텍처 |
-| `sudo -v` | 오류 없이 돌아옴 | 시스템 설정을 바꿀 관리자 권한 |
+| `Caption`, `OSArchitecture` | Windows Server 2022 Datacenter, 64비트 | 선택한 OS·아키텍처 |
+| `$env:COMPUTERNAME` | `ARC-LAB-WIN-01` (대소문자 차이는 정상) | 이후 Arc 대상과 비교할 컴퓨터 이름 |
+| `Is64BitProcess`, `PSVersion` | `True`, Windows PowerShell `5.1` | 온보딩 스크립트 실행 환경 |
+| `IsInRole(...)` | `True` | UAC로 승격된 관리자 창 |
 
-여기까지는 Azure Linux Guest Agent나 메타데이터 접근을 변경하지 않습니다.
-SSH 접속이 불안정하다면 다음 단계로 넘어가지 마세요.
+여기까지는 Azure Windows Guest Agent나 메타데이터 접근을 변경하지 않습니다.
+RDP 접속이 불안정하다면 다음 단계로 넘어가지 마세요.
 
 이제 [Arc 등록·관리·정리 실습](docs/hands-on.md)으로 이동합니다.
 
@@ -310,9 +322,9 @@ SSH 접속이 불안정하다면 다음 단계로 넘어가지 마세요.
 
 | 끊긴 위치 | 이어가기 전에 할 일 |
 | --- | --- |
-| PC의 SSH | 같은 VM 공인 IP·개인 키로 다시 접속하고 NSG·UFW의 내 IP 허용 확인 |
-| Ubuntu 셸 | [평가 변수와 방화벽](docs/hands-on.md#evaluation-settings) 재확인. 셸 변수는 새 창에 남지 않음 |
-| VM 재부팅 | Guest Agent·방화벽·IMDS 차단을 재검증하고 평가 환경 변수 재설정 |
+| PC의 RDP | 같은 VM 공인 IP·로컬 관리자 계정으로 다시 접속하고 NSG·Windows 방화벽 확인 |
+| VM PowerShell | 관리자 64비트 창을 다시 열고 [평가 변수와 방화벽](docs/hands-on.md#evaluation-settings) 재확인 |
+| VM 재부팅 | Guest Agent·방화벽·IMDS 차단과 Machine 범위 평가 변수를 재검증 |
 | Cloud Shell | [확장 실습의 공통 준비](docs/hands-on.md#cloud-shell-setup)에서 구독·그룹·머신·리전 변수 복원 |
 
 다른 세션에서 새 VM이나 새 Arc 리소스를 만드는 것으로 재접속을 대신하지 않습니다.
@@ -322,7 +334,7 @@ SSH 접속이 불안정하다면 다음 단계로 넘어가지 마세요.
 
 | 항목 | 이번 구성 | 정리할 때의 의미 |
 | --- | --- | --- |
-| VM 컴퓨팅 | Ubuntu 1대 | OS 종료와 Azure의 할당 해제는 다를 수 있음 |
+| VM 컴퓨팅·Windows 라이선스 | Windows Server 1대 | OS 종료와 Azure의 할당 해제는 다를 수 있음 |
 | OS 디스크 | 1개 | VM 할당 해제 후에도 저장 비용이 남을 수 있음 |
 | Standard 공인 IP | 1개 | 미사용 상태라고 무료라고 가정하지 않기 |
 | Arc 기본 인벤토리·태그·Custom Script | 기본 제어 영역 | 기반 VM 요금과 부가 관리 서비스 요금은 별개 |
@@ -338,7 +350,7 @@ SSH 접속이 불안정하다면 다음 단계로 넘어가지 마세요.
 | --- | --- |
 | Azure나 Arc 용어가 낯섦 | [00. Azure Arc 첫걸음](docs/00-azure-arc-basics.md) |
 | 구독이 안 보이거나 생성·삭제 권한 부족 | [모듈 01: 시작 전 확인](#prerequisites) |
-| SSH가 안 됨 | [모듈 03: SSH 확인](#ssh-check), [상세 오류 대응](docs/hands-on.md#troubleshooting) |
+| RDP가 안 됨 | [모듈 03: RDP 확인](#rdp-check), [상세 오류 대응](docs/hands-on.md#troubleshooting) |
 | 평가용 설치·Arc 연결·확장이 실패함 | [상세 오류 대응](docs/hands-on.md#troubleshooting) |
 | 중도 실패했거나 비용이 걱정됨 | [모듈 07: 정리](docs/hands-on.md#cleanup) |
 
@@ -357,7 +369,8 @@ VM을 할당 해제해도 디스크·공인 IP 등의 비용은 남을 수 있�
 - [구현 계획](docs/superpowers/plans/2026-11-11-azure-arc-server-lab.md)
 
 참고 저장소의 단계 구분과 학습 흐름을 참고했으며 문장·코드·이미지는 복사하지 않았습니다.
-기존 설계·계획은 최초 실습의 승인 기록이고, 현재 학습 순서의 진입점은 이 README입니다.
+기존 설계·계획은 **Ubuntu 기반 최초 실습의 과거 승인 기록**입니다.
+Windows 전환 후 현재 절차는 이 README와 `docs/hands-on.md`를 따릅니다.
 
 [evaluate]: https://learn.microsoft.com/en-us/azure/azure-arc/servers/plan-evaluate-on-azure-virtual-machine
 [prerequisites]: https://learn.microsoft.com/en-us/azure/azure-arc/servers/prerequisites

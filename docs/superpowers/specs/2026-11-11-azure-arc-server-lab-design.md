@@ -1,5 +1,9 @@
 # Azure 안에서 시작하는 Azure Arc 서버 실습 설계
 
+> **과거 승인 기록:** 아래는 최초 Ubuntu 실습 설계입니다. 이후 사용자 요청으로
+> Windows Server 기반으로 변경했습니다. 현재 실습은 [README](../../../README.md)와
+> [상세 가이드](../../hands-on.md)를 따르며 아래 Ubuntu 명령·설정을 적용하지 않습니다.
+
 ## 목적과 승인 상태
 
 Azure 외부 장비가 없는 사용자가 Azure 구독만으로 Azure Arc-enabled servers의

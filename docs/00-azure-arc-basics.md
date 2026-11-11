@@ -8,13 +8,13 @@
 - 구독·리소스 그룹·리전과 VM의 역할을 설명합니다.
 - Azure Arc가 서버를 Azure로 이전하는 기능이 아님을 이해합니다.
 - Azure VM과 Arc 서버가 두 리소스로 보이는 이유를 설명합니다.
-- SSH·RBAC·방화벽·에이전트가 각각 해결하는 문제를 구분합니다.
+- RDP·RBAC·방화벽·에이전트가 각각 해결하는 문제를 구분합니다.
 
 ## 1. 먼저 작은 서버 관리 상황을 생각해 보기
 
 👁️ **설명**
 
-회사에 Ubuntu 서버가 한 대 있고, 다른 클라우드에도 서버가 있다고 생각해 보세요.
+회사에 Windows Server가 한 대 있고, 다른 클라우드에도 서버가 있다고 생각해 보세요.
 서버마다 직접 접속해 OS 버전을 확인하거나 설정 명령을 실행하면 관리 방법이 흩어집니다.
 Azure Arc-enabled servers는 이런 **Azure 외부의 Windows·Linux 서버를 Azure의 관리 대상으로
 등록**하는 서비스입니다. 서버의 실행 위치를 바꾸지 않고 Portal에서 정보를 조회하고,
@@ -60,11 +60,11 @@ VM이 꺼져도 디스크와 공인 IP는 남을 수 있고, 비용도 모두 �
 
 👁️ **설명**
 
-평가 설정 후 Arc에 등록하면 한 Ubuntu VM에 대해 관리 대상이 두 개 생깁니다.
+평가 설정 후 Arc에 등록하면 한 Windows Server VM에 대해 관리 대상이 두 개 생깁니다.
 
 ```mermaid
 flowchart TB
-  OS["실제 Ubuntu OS · 컴퓨터는 한 대"]
+  OS["실제 Windows Server OS · 컴퓨터는 한 대"]
   COMPUTE["Azure VM 리소스<br/>Microsoft.Compute/virtualMachines"]
   ARC["Arc 서버 리소스<br/>Microsoft.HybridCompute/machines"]
   COMPUTE -->|"가상 하드웨어 · 전원·디스크·네트워크"| OS
@@ -76,7 +76,7 @@ flowchart TB
 | VM 켜기·할당 해제, 디스크·공인 IP 확인 | **Azure VM 리소스** |
 | Arc 연결 상태·OS 정보·Arc 에이전트 확인 | **Arc 서버 리소스** |
 | 실습용 Custom Script 확장 설치·제거 | **Arc 서버의 확장** |
-| Ubuntu 명령을 직접 실행해서 결과 확인 | **PC에서 SSH로 접속한 VM** |
+| PowerShell 명령을 직접 실행해서 결과 확인 | **PC에서 RDP로 접속한 VM** |
 
 Arc 서버 리소스를 삭제해도 이 실습의 Azure VM 컴퓨팅 리소스를 삭제하는 것은 아닙니다.
 반대로 VM만 삭제하면 Arc 등록이 별도 리소스로 남을 수 있습니다.
@@ -87,7 +87,7 @@ Arc 서버 리소스를 삭제해도 이 실습의 Azure VM 컴퓨팅 리소스�
 “Portal에서 확장을 설치하라”는 지시를 보면 먼저 Azure VM인지 Arc 서버인지 확인하세요.
 이번 실습의 관리 검증은 **Arc 서버에 배포한 확장**으로 수행합니다.
 
-## 4. 에이전트·SSH·권한은 서로 다른 역할입니다
+## 4. 에이전트·RDP·권한은 서로 다른 역할입니다
 
 👁️ **설명**
 
@@ -100,15 +100,15 @@ Arc에 연결했다는 이유만으로 로그 수집이나 유료 관리 기능�
 | 요소 | 답하는 질문 | 이번 실습의 역할 |
 | --- | --- | --- |
 | Azure RBAC | 누가 Azure 리소스를 관리할 수 있나? | Arc 등록, 태그·확장 변경, 삭제 권한 |
-| SSH 키·Ubuntu 계정 | 누가 OS에 로그인할 수 있나? | 내 PC에서 `arcadmin`으로 VM 접속 |
-| sudo | OS 안에서 관리자 작업을 할 수 있나? | 서비스·방화벽·에이전트 설치 |
-| NSG | Azure 네트워크에서 어느 IP·포트를 허용하나? | 내 PC의 TCP 22만 허용 |
-| UFW | Ubuntu OS에서 어느 통신을 허용하나? | SSH 허용 유지와 평가용 IMDS 차단 |
+| Windows 로컬 계정·암호 | 누가 OS에 로그인할 수 있나? | 내 PC에서 RDP로 `arcadmin` 접속 |
+| UAC 관리자 승격 | OS 안에서 관리자 작업을 할 수 있나? | 관리자 Windows PowerShell로 서비스·방화벽·에이전트 설치 |
+| NSG | Azure 네트워크에서 어느 IP·포트를 허용하나? | 내 PC의 TCP 3389만 허용 |
+| Windows Defender 방화벽 | Windows OS에서 어느 통신을 허용하나? | RDP 허용 유지와 평가용 IMDS 차단 |
 | Connected Machine Agent | 서버와 Azure의 관리 연결이 살아 있나? | 정보 동기화와 확장 관리 |
 
-Azure 권한이 있다고 자동으로 SSH 개인 키를 얻는 것은 아닙니다.
-NSG가 SSH를 허용해도 키가 맞지 않으면 로그인은 실패합니다.
-반대로 SSH가 되어도 Arc 권한·아웃바운드 통신이 막히면 Arc 등록은 실패합니다.
+Azure 권한이 있다고 자동으로 VM의 로컬 관리자 암호를 얻는 것은 아닙니다.
+NSG가 RDP를 허용해도 계정·암호가 맞지 않으면 로그인은 실패합니다.
+반대로 RDP가 되어도 Arc 권한·아웃바운드 통신이 막히면 Arc 등록은 실패합니다.
 
 ⚠️ **주의**
 
@@ -125,9 +125,9 @@ Arc도 자체 관리 연결과 ID를 사용하므로, 평가 환경에서 두 �
 | 준비 작업 | 필요한 이유 | 주의할 영향 |
 | --- | --- | --- |
 | 기존 Azure VM 확장 제거 | Arc가 기존 Azure VM 확장을 인수해 관리하는 것은 아님 | 정책이 재설치하면 중단 |
-| `walinuxagent` 중지·비활성화 | Azure VM Guest Agent와 Arc 관리 경로의 충돌 방지 | VM Run Command·VM 확장에 의존 불가 |
+| `WindowsAzureGuestAgent` 중지·비활성화 | Azure VM Guest Agent와 Arc 관리 경로의 충돌 방지 | VM Run Command·VM 확장·암호 재설정에 의존 불가 |
 | Azure IMDS 접근 차단 | Azure VM의 메타데이터·관리 ID와 Arc의 관리 표현을 구분 | 기존 Azure VM 관리 ID 인증 사용 제한 |
-| `MSFT_ARC_TEST=true` 설정 | Microsoft 평가용 절차에 필요한 테스트 환경 표시 | 현재 셸·systemd·sudo 전달과 재부팅 후 상태 확인 |
+| `MSFT_ARC_TEST=true` 설정 | Microsoft 평가용 절차에 필요한 테스트 환경 표시 | Machine 범위에 저장하고 현재 프로세스와 재부팅 후 상태도 확인 |
 
 **IMDS(Instance Metadata Service)**는 VM이 자신의 위치·ID 등 메타데이터를 조회하는 서비스입니다.
 평가 절차에서는 `169.254.169.254`와 `169.254.169.253` 접근을 차단합니다.
@@ -143,14 +143,14 @@ Connected Machine Agent는 별도의 로컬 메타데이터 서비스를 제공�
 
 | 확인 대상 | 성공 기준 | 이것만으로 보장하지 않는 것 |
 | --- | --- | --- |
-| SSH | 새 SSH 창으로 접속 성공 | Arc 등록·확장 관리 성공 |
+| RDP | 원격 데스크톱으로 재접속 성공 | Arc 등록·확장 관리 성공 |
 | Arc 연결 | 에이전트와 Portal에서 `Connected` | 모든 부가 서비스나 확장 성공 |
 | 태그 | `lab=arc-test-01`이 저장됨 | 게스트 OS 안의 변경 |
 | Custom Script 확장 | `Succeeded`와 VM 안의 `arc-lab-ok` 파일 | 운영 보안·성능·장애 복구 준비 완료 |
 | 정리 | Arc 서버와 이번 실습의 VM·디스크·공인 IP 부재 | 과거 사용 요금의 취소 |
 
 Arc는 서버 관리 수단이지 애플리케이션 네트워크를 연결하는 VPN이 아닙니다.
-Arc에 등록했다고 서로 다른 서버 간 통신이나 SSH 인바운드가 자동 허용되지는 않습니다.
+Arc에 등록했다고 서로 다른 서버 간 통신이나 RDP 인바운드가 자동 허용되지는 않습니다.
 이번 실습은 관리 연결만 경험하며 온프레미스 전체 네트워크나 운영 보안 설계를 재현하지 않습니다.
 
 ## Portal 둘러보기
@@ -180,7 +180,7 @@ VM 목록과 Arc 머신 목록이 서로 다른 화면임을 확인합니다.
 
 - [ ] 구독·리소스 그룹·리전의 차이를 설명할 수 있습니다.
 - [ ] 컴퓨터 한 대와 Azure 관리 리소스 두 개를 구분할 수 있습니다.
-- [ ] SSH 접속, Azure 권한, Arc 연결이 서로 다른 조건임을 이해했습니다.
+- [ ] RDP 접속, Azure 권한, Arc 연결이 서로 다른 조건임을 이해했습니다.
 - [ ] 평가용 Azure VM 구성과 실제 외부 서버의 운영 구성이 다름을 이해했습니다.
 - [ ] 실습 전체가 무료는 아니며 마지막 정리가 필요함을 이해했습니다.
 

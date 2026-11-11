@@ -1,5 +1,9 @@
 # Azure Arc 서버 입문 실습 구현 계획
 
+> **과거 구현 기록:** 아래는 완료된 최초 Ubuntu 실습 계획입니다. 이후 사용자 요청으로
+> Windows Server 기반으로 변경했습니다. 현재 실습은 [README](../../../README.md)와
+> [상세 가이드](../../hands-on.md)를 따르며 이 계획을 다시 실행하지 않습니다.
+
 > **에이전트 실행자:** 필수 하위 스킬은 `superpowers:executing-plans` 또는
 > `superpowers:subagent-driven-development`이다. 체크박스로 작업 완료를 추적한다.
 
